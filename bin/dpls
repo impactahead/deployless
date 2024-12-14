@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+
+require 'tty-option'
+require 'tty-prompt'
+require 'tty-file'
+require 'yaml'
+
+class Command
+  include TTY::Option
+
+  argument :command do
+    desc "The command to run"
+  end
+end
+
+command = Command.new
+command.parse(ARGV)
+
+case command.params['command']
+when 'init'
+  prompt = TTY::Prompt.new
+  result = prompt.collect do
+    key(:deployment_setup).enum_select("Deployment setup:", ["Dokku"], required: true)
+    key(:background_job_processor).enum_select("Background job processor:", ["None", "Sidekiq"], required: true)
+    key(:production_server_ip).ask("Production server IP:", required: true)
+    key(:production_server_username).ask("Production server username:", required: true, default: 'ubuntu')
+    key(:ssh_key_path).ask("SSH key path:", required: true, default: '~/.ssh/id_rsa')
+    key(:email).ask("Email:", required: true)
+    key(:app_name).ask("Application name:", required: true)
+  end
+
+  TTY::File.create_file('.deployless.yml', result.to_yaml)
+  TTY::File.safe_append_to_file(".gitignore", ".deployless.yml")
+when 'prepare'
+  config = YAML.load_file('.deployless.yml')
+  puts "Config: #{config.inspect}"
+else
+  puts 'Unknown command'
+end
+
