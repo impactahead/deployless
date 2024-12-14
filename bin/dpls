@@ -5,6 +5,8 @@ require 'tty-prompt'
 require 'tty-file'
 require 'yaml'
 
+require_relative '../lib/deployless'
+
 class Command
   include TTY::Option
 
@@ -27,13 +29,33 @@ when 'init'
     key(:ssh_key_path).ask("SSH key path:", required: true, default: '~/.ssh/id_rsa')
     key(:email).ask("Email:", required: true)
     key(:app_name).ask("Application name:", required: true)
+    key(:domain).ask("Domain:", required: true)
   end
 
   TTY::File.create_file('.deployless.yml', result.to_yaml)
   TTY::File.safe_append_to_file(".gitignore", ".deployless.yml")
 when 'prepare'
+  prompt = TTY::Prompt.new
   config = YAML.load_file('.deployless.yml')
-  puts "Config: #{config.inspect}"
+  dokku = ::Deployless::Dokku.new(config)
+  dokku.configure
+  dokku.install
+  dokku.add_ssh_key
+  dokku.create_app
+  dokku.set_initial_environment_variables
+  dokku.install_postgres
+  result = "No"
+
+  while result == "No"
+    result = prompt.enum_select("Add DNS record for the domain #{config.fetch(:domain)} - type: A, value: #{config.fetch(:production_server_ip)}. Is it done?", ["Yes", "No"], required: true)
+    if result == "No"
+      puts "Please add DNS record for the domain #{config.fetch(:domain)} - type: A, value: #{config.fetch(:production_server_ip)} and confirm when done."
+    end
+  end
+
+  dokku.configure_domain
+  dokku.configure_ssl
+  dokku.print_instructions
 else
   puts 'Unknown command'
 end
