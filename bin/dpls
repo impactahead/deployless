@@ -13,6 +13,10 @@ class Command
   argument :command do
     desc "The command to run"
   end
+
+  argument :task do
+    desc "The task to run"
+  end
 end
 
 command = Command.new
@@ -56,6 +60,15 @@ when 'prepare'
   dokku.configure_domain
   dokku.configure_ssl
   dokku.print_instructions
+when 'production'
+  case command.params['task']
+  when 'console'
+    config = YAML.load_file('.deployless.yml')
+    dokku = ::Deployless::Dokku.new(config)
+    dokku.run_console
+  else
+    puts 'Unknown task'
+  end
 else
   puts 'Unknown command'
 end

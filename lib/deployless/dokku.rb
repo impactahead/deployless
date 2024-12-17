@@ -100,5 +100,13 @@ module Deployless
       puts "Then you can deploy by running:"
       puts "git push dokku main"
     end
+
+    def run_console
+      app_name = @config.fetch(:app_name)
+      server_ip = @config.fetch(:production_server_ip)
+
+      puts "Connecting to production rails console..."
+      system("ssh -t dokku@#{server_ip} enter #{app_name} web rails c")
+    end
   end
 end
