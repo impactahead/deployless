@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    deployless (0.0.1)
+    deployless (0.0.3)
       sshkit (= 1.23.2)
       tty-file (= 0.10.0)
       tty-option (= 0.3.0)

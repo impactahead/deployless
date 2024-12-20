@@ -1,10 +1,5 @@
 #!/usr/bin/env ruby
 
-require 'tty-option'
-require 'tty-prompt'
-require 'tty-file'
-require 'yaml'
-
 require_relative '../lib/deployless'
 
 class Command
@@ -25,47 +20,49 @@ command.parse(ARGV)
 case command.params['command']
 when 'init'
   prompt = TTY::Prompt.new
-  result = prompt.collect do
+  configuration = prompt.collect do
     key(:deployment_setup).enum_select("Deployment setup:", ["Dokku"], required: true)
     key(:background_job_processor).enum_select("Background job processor:", ["None", "Sidekiq"], required: true)
-    key(:production_server_ip).ask("Production server IP:", required: true)
-    key(:production_server_username).ask("Production server username:", required: true, default: 'ubuntu')
-    key(:ssh_key_path).ask("SSH key path:", required: true, default: '~/.ssh/id_rsa')
-    key(:email).ask("Email:", required: true)
     key(:app_name).ask("Application name:", required: true)
-    key(:domain).ask("Domain:", required: true)
+    key(:support_for_staging_environment).enum_select("Support for staging environment?:", ["Yes", "No"], required: true)
   end
 
-  TTY::File.create_file('.deployless.yml', result.to_yaml)
-  TTY::File.safe_append_to_file(".gitignore", ".deployless.yml")
-when 'prepare'
-  prompt = TTY::Prompt.new
-  config = YAML.load_file('.deployless.yml')
-  dokku = ::Deployless::Dokku.new(config)
-  dokku.configure
-  dokku.install
-  dokku.add_ssh_key
-  dokku.create_app
-  dokku.set_initial_environment_variables
-  dokku.install_postgres
-  result = "No"
+  environments = %i[production]
+  environments << :staging if configuration.fetch(:support_for_staging_environment) == 'Yes'
 
-  while result == "No"
-    result = prompt.enum_select("Add DNS record for the domain #{config.fetch(:domain)} - type: A, value: #{config.fetch(:production_server_ip)}. Is it done?", ["Yes", "No"], required: true)
-    if result == "No"
-      puts "Please add DNS record for the domain #{config.fetch(:domain)} - type: A, value: #{config.fetch(:production_server_ip)} and confirm when done."
+  environments.each do |environment|
+    puts "Configuring #{environment} environment"
+    configuration[environment] = prompt.collect do
+      key(:server_ip).ask("Server IP:", required: true)
+      key(:ssh_key_path).ask("SSH key path:", required: true, default: '~/.ssh/id_rsa')
+      key(:server_username).ask("Server username:", required: true, default: 'ubuntu')
+      key(:email).ask("Email:", required: true)
+      key(:domain).ask("Domain:", required: true)
     end
   end
 
-  dokku.configure_domain
-  dokku.configure_ssl
-  dokku.print_instructions
-when 'production'
+  TTY::File.create_file('.deployless.yml', configuration.to_yaml)
+  TTY::File.safe_append_to_file(".gitignore", ".deployless.yml")
+when 'production', 'staging'
   case command.params['task']
   when 'console'
     config = YAML.load_file('.deployless.yml')
-    dokku = ::Deployless::Dokku.new(config)
-    dokku.run_console
+    raise ArgumentError, "Environment #{command.params['command']} is not configured" if config[command.params['command'].to_sym].nil?
+
+    provider = ::Deployless::Providers::DokkuProvider.new(
+      config: config,
+      environment: command.params['command']
+    )
+    provider.run_console
+  when 'prepare'
+    config = YAML.load_file('.deployless.yml')
+    raise ArgumentError, "Environment #{command.params['command']} is not configured" if config[command.params['command'].to_sym].nil?
+
+    provider = ::Deployless::Providers::DokkuProvider.new(
+      config: config,
+      environment: command.params['command']
+    )
+    provider.configure_environment
   else
     puts 'Unknown task'
   end
