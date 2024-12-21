@@ -14,6 +14,7 @@ module Deployless
       def initialize(config:, environment:)
         @config = config
         @environment = environment
+        configure
       end
 
       def run_console
@@ -24,11 +25,10 @@ module Deployless
       end
 
       def configure_environment
-        configure
         install
         add_ssh_key
         create_app
-        set_initial_environment_variables
+        update_environment_variables
         install_postgres
         install_redis if @config.fetch(:background_job_processor) == 'Sidekiq'
 
@@ -47,6 +47,15 @@ module Deployless
         print_instructions
       end
 
+      def update_environment_variables
+        environment_variables = env_config.fetch(:environment_variables)
+  
+        app = app_name
+        on [env_config.fetch(:server_ip)] do |host|
+          execute :dokku, 'config:set', app, environment_variables.map { |key, value| "#{key.to_s.upcase}=#{value}" }.join(' ')
+        end
+      end
+
       private
 
       def configure
@@ -54,9 +63,9 @@ module Deployless
           ssh.connection_timeout = 30
           ssh.ssh_options = {
             user: env_config.fetch(:server_username),
-            keys: %w(env_config.fetch(:ssh_key_path)),
+            keys: [env_config.fetch(:ssh_key_path)], # Fixed array syntax for keys
             forward_agent: false,
-            auth_methods: %w(publickey)
+            auth_methods: %w(publickey password keyboard-interactive) # Added additional auth methods
           }
         end
       end
@@ -88,23 +97,6 @@ module Deployless
           else
             execute :dokku, 'apps:create', app
           end
-        end
-      end
-  
-      def set_initial_environment_variables
-        secret_key_base = SecureRandom.hex(64)
-  
-        environment_variables = {
-          'SECRET_KEY_BASE' => secret_key_base,
-          'RAILS_ENV' => @environment,
-          'RAKE_ENV' => @environment,
-          'RAILS_LOG_TO_STDOUT' => 'enabled',
-          'RAILS_SERVE_STATIC_FILES' => 'enabled'
-        }
-  
-        app = app_name
-        on [env_config.fetch(:server_ip)] do |host|
-          execute :dokku, 'config:set', app, environment_variables.map { |key, value| "#{key}=#{value}" }.join(' ')
         end
       end
   

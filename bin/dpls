@@ -39,6 +39,14 @@ when 'init'
       key(:email).ask("Email:", required: true)
       key(:domain).ask("Domain:", required: true)
     end
+
+    configuration[environment][:environment_variables] = {
+      secret_key_base: SecureRandom.hex(64),
+      rails_env: environment,
+      rake_env: environment,
+      rails_log_to_stdout: 'enabled',
+      rails_serve_static_files: 'enabled'
+    }
   end
 
   TTY::File.create_file('.deployless.yml', configuration.to_yaml)
@@ -63,6 +71,15 @@ when 'production', 'staging'
       environment: command.params['command']
     )
     provider.configure_environment
+  when 'update-env'
+    config = YAML.load_file('.deployless.yml')
+    raise ArgumentError, "Environment #{command.params['command']} is not configured" if config[command.params['command'].to_sym].nil?
+
+    provider = ::Deployless::Providers::DokkuProvider.new(
+      config: config,
+      environment: command.params['command']
+    )
+    provider.update_environment_variables
   else
     puts 'Unknown task'
   end

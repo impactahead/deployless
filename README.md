@@ -19,3 +19,9 @@ Connect to Rails console:
 ```bash
 dpls production console
 ```
+
+Update environments by updating `environment_variables` section in `.deployless.yml` for given environment and then invoking:
+
+```bash
+dpls production update-env
+```
